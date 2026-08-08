@@ -218,157 +218,117 @@ end)
 local function HemaApplyCustomShell()
     if not Library or not Library.ScreenGui then return end
 
-    -- ===== 高科技感配色 =====
+    -- 高科技感：實心深色底板 + 電青強調（不亂改透明度，避免洗白/看不清）
     local C = {
-        bg0 = Color3.fromRGB(6, 8, 14),
-        bg1 = Color3.fromRGB(10, 14, 22),
-        bg2 = Color3.fromRGB(14, 18, 28),
-        bg3 = Color3.fromRGB(18, 24, 36),
-        line = Color3.fromRGB(0, 220, 255),
-        line2 = Color3.fromRGB(120, 60, 255),
-        text = Color3.fromRGB(220, 235, 255),
-        dim = Color3.fromRGB(120, 140, 170),
-        accent = Color3.fromRGB(0, 230, 255),
-        warn = Color3.fromRGB(255, 80, 120),
+        bgOuter = Color3.fromRGB(12, 14, 20),
+        bgMain  = Color3.fromRGB(16, 18, 26),
+        bgPanel = Color3.fromRGB(22, 26, 36),
+        accent  = Color3.fromRGB(0, 220, 255),
+        accent2 = Color3.fromRGB(130, 90, 255),
+        text    = Color3.fromRGB(230, 235, 245),
+        dim     = Color3.fromRGB(140, 150, 170),
     }
 
     pcall(function()
         Library.AccentColor = C.accent
         if Library.GetDarkerColor then
             Library.AccentColorDark = Library:GetDarkerColor(C.accent)
+        else
+            Library.AccentColorDark = Color3.fromRGB(0, 140, 180)
         end
         if Library.UpdateColorsUsingRegistry then
-            Library:UpdateColorsUsingRegistry()
+            pcall(function() Library:UpdateColorsUsingRegistry() end)
         end
     end)
 
-    local function styleFrame(fr, bg, tr)
-        pcall(function()
-            fr.BackgroundColor3 = bg
-            if tr ~= nil then fr.BackgroundTransparency = tr end
-            fr.BorderSizePixel = 0
-        end)
-    end
-
     for _, obj in ipairs(Library.ScreenGui:GetDescendants()) do
-        -- 標題改名
-        if (obj:IsA("TextLabel") or obj:IsA("TextButton")) then
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
             local t = tostring(obj.Text or "")
             if t == "Lunara" or t == "Linoria" then
                 obj.Text = "河馬科技"
             end
-            pcall(function()
-                if obj.TextColor3 and obj.TextTransparency < 0.5 then
-                    local h, s, v = Color3.toHSV(obj.TextColor3)
-                    -- 偏棕舊強調色 → 青
-                    if s > 0.15 and v > 0.3 then
-                        local r, g, b = obj.TextColor3.R, obj.TextColor3.G, obj.TextColor3.B
-                        if r > 0.6 and g > 0.4 and b < 0.5 then
-                            obj.TextColor3 = C.accent
-                        end
-                    end
-                end
-            end)
-        end
-
-        if obj:IsA("Frame") or obj:IsA("ScrollingFrame") then
-            local n = string.lower(tostring(obj.Name))
-            local ok, sz = pcall(function() return obj.AbsoluteSize end)
-            local area = (ok and sz) and (sz.X * sz.Y) or 0
-            if n == "outer" then
-                styleFrame(obj, C.bg0, 0.05)
-            elseif n == "main" or n:find("main") or area > 100000 then
-                styleFrame(obj, C.bg1, 0.08)
-            elseif area > 20000 or n:find("group") or n:find("tab") or n:find("holder") or n:find("box") then
-                styleFrame(obj, C.bg2, 0.1)
-            elseif area > 2000 then
-                styleFrame(obj, C.bg3, 0.12)
-            end
         end
     end
 
-    -- Outer 高科技外殼裝飾
     for _, obj in ipairs(Library.ScreenGui:GetDescendants()) do
-        if obj:IsA("Frame") and string.lower(obj.Name) == "outer" then
-            -- 雙色光邊
-            local stroke = obj:FindFirstChild("HemaShellStroke")
-            if not stroke then
-                stroke = Instance.new("UIStroke")
-                stroke.Name = "HemaShellStroke"
-                stroke.Thickness = 2
-                stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-                stroke.Parent = obj
-            end
-            stroke.Color = C.line
+        if not (obj:IsA("Frame") or obj:IsA("ScrollingFrame")) then continue end
+        local n = string.lower(tostring(obj.Name))
+        local ok, sz = pcall(function() return obj.AbsoluteSize end)
+        if not ok or not sz then continue end
 
-            -- 頂部科技條
-            if not obj:FindFirstChild("HemaTechBar") then
-                local bar = Instance.new("Frame")
-                bar.Name = "HemaTechBar"
-                bar.BorderSizePixel = 0
-                bar.Size = UDim2.new(1, 0, 0, 3)
-                bar.Position = UDim2.new(0, 0, 0, 0)
-                bar.BackgroundColor3 = C.line
-                bar.ZIndex = 120
-                bar.Parent = obj
-                local g = Instance.new("UIGradient")
-                g.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, C.line2),
-                    ColorSequenceKeypoint.new(0.5, C.line),
-                    ColorSequenceKeypoint.new(1, C.line2),
-                })
-                g.Parent = bar
-            end
-
-            -- 角標
-            if not obj:FindFirstChild("HemaShellBadge") then
-                local badge = Instance.new("TextLabel")
-                badge.Name = "HemaShellBadge"
-                badge.BackgroundTransparency = 1
-                badge.Size = UDim2.new(0, 140, 0, 18)
-                badge.Position = UDim2.new(1, -148, 0, 6)
-                badge.Text = "◆ 河馬科技 // SYS"
-                badge.TextSize = 11
-                badge.Font = Enum.Font.Code
-                badge.TextColor3 = C.accent
-                badge.TextXAlignment = Enum.TextXAlignment.Right
-                badge.ZIndex = 121
-                badge.Parent = obj
-            end
-
-            -- 底部狀態條
-            if not obj:FindFirstChild("HemaTechFooter") then
-                local foot = Instance.new("TextLabel")
-                foot.Name = "HemaTechFooter"
-                foot.BackgroundTransparency = 1
-                foot.Size = UDim2.new(1, -16, 0, 14)
-                foot.Position = UDim2.new(0, 8, 1, -16)
-                foot.Text = "HEMA.OS  |  SECURE CHANNEL  |  UI.REV.2"
-                foot.TextSize = 10
-                foot.Font = Enum.Font.Code
-                foot.TextColor3 = C.dim
-                foot.TextXAlignment = Enum.TextXAlignment.Left
-                foot.ZIndex = 121
-                foot.Parent = obj
-            end
+        -- 只調整「大面板」底色，且強制不透明，避免疊層變鬼影
+        if n == "outer" then
+            obj.BackgroundColor3 = C.bgOuter
+            obj.BackgroundTransparency = 0
+            obj.BorderSizePixel = 0
+        elseif n == "main" or (sz.X > 420 and sz.Y > 280) then
+            obj.BackgroundColor3 = C.bgMain
+            obj.BackgroundTransparency = 0
+            obj.BorderSizePixel = 0
+        elseif sz.X > 160 and sz.Y > 80 and (n:find("group") or n:find("box") or n:find("holder") or n:find("tab") or n:find("container")) then
+            obj.BackgroundColor3 = C.bgPanel
+            obj.BackgroundTransparency = 0
+            obj.BorderSizePixel = 0
         end
     end
 
-    -- 動態光邊（低調呼吸）
+    for _, outer in ipairs(Library.ScreenGui:GetDescendants()) do
+        if not (outer:IsA("Frame") and string.lower(outer.Name) == "outer") then continue end
+
+        local stroke = outer:FindFirstChild("HemaShellStroke")
+        if not stroke then
+            stroke = Instance.new("UIStroke")
+            stroke.Name = "HemaShellStroke"
+            stroke.Thickness = 1.8
+            stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            stroke.Parent = outer
+        end
+        stroke.Color = C.accent
+
+        if not outer:FindFirstChild("HemaTechBar") then
+            local bar = Instance.new("Frame")
+            bar.Name = "HemaTechBar"
+            bar.BorderSizePixel = 0
+            bar.Size = UDim2.new(1, 0, 0, 2)
+            bar.BackgroundColor3 = C.accent
+            bar.ZIndex = 50
+            bar.Parent = outer
+            local g = Instance.new("UIGradient")
+            g.Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, C.accent2),
+                ColorSequenceKeypoint.new(0.5, C.accent),
+                ColorSequenceKeypoint.new(1, C.accent2),
+            })
+            g.Parent = bar
+        end
+
+        if not outer:FindFirstChild("HemaShellBadge") then
+            local badge = Instance.new("TextLabel")
+            badge.Name = "HemaShellBadge"
+            badge.BackgroundTransparency = 1
+            badge.Size = UDim2.new(0, 150, 0, 16)
+            badge.Position = UDim2.new(1, -158, 0, 4)
+            badge.Text = "河馬科技 // TECH"
+            badge.TextSize = 11
+            badge.Font = Enum.Font.GothamBold
+            badge.TextColor3 = C.accent
+            badge.TextXAlignment = Enum.TextXAlignment.Right
+            badge.ZIndex = 51
+            badge.Parent = outer
+        end
+    end
+
+    -- 輕量呼吸光邊（不快、不花）
     if not getgenv().HemaShellRGBConn then
-        local hue = 0.5
         getgenv().HemaShellRGBConn = game:GetService("RunService").RenderStepped:Connect(function()
             if not Library or Library.Unloaded or not Library.ScreenGui then return end
-            hue = (hue + 0.002) % 1
-            -- 青 ↔ 紫 之間擺動，比較有科技感、不會太花
-            local t = (math.sin(os.clock() * 1.2) + 1) / 2
-            local col = Color3.fromRGB(0, 200, 255):Lerp(Color3.fromRGB(140, 80, 255), t * 0.55)
+            local t = (math.sin(os.clock() * 0.9) + 1) / 2
+            local col = C.accent:Lerp(C.accent2, t * 0.4)
             for _, obj in ipairs(Library.ScreenGui:GetDescendants()) do
-                if obj.Name == "HemaShellStroke" or obj.Name == "HemaTechBar" then
-                    pcall(function()
-                        if obj:IsA("UIStroke") then obj.Color = col
-                        elseif obj:IsA("Frame") then obj.BackgroundColor3 = col end
-                    end)
+                if obj.Name == "HemaShellStroke" and obj:IsA("UIStroke") then
+                    obj.Color = col
+                elseif obj.Name == "HemaTechBar" and obj:IsA("Frame") then
+                    obj.BackgroundColor3 = col
                 end
             end
         end)
