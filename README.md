@@ -217,40 +217,161 @@ end)
 
 local function HemaApplyCustomShell()
     if not Library or not Library.ScreenGui then return end
-    task.wait(0.3)
+
+    -- ===== 高科技感配色 =====
+    local C = {
+        bg0 = Color3.fromRGB(6, 8, 14),
+        bg1 = Color3.fromRGB(10, 14, 22),
+        bg2 = Color3.fromRGB(14, 18, 28),
+        bg3 = Color3.fromRGB(18, 24, 36),
+        line = Color3.fromRGB(0, 220, 255),
+        line2 = Color3.fromRGB(120, 60, 255),
+        text = Color3.fromRGB(220, 235, 255),
+        dim = Color3.fromRGB(120, 140, 170),
+        accent = Color3.fromRGB(0, 230, 255),
+        warn = Color3.fromRGB(255, 80, 120),
+    }
+
+    pcall(function()
+        Library.AccentColor = C.accent
+        if Library.GetDarkerColor then
+            Library.AccentColorDark = Library:GetDarkerColor(C.accent)
+        end
+        if Library.UpdateColorsUsingRegistry then
+            Library:UpdateColorsUsingRegistry()
+        end
+    end)
+
+    local function styleFrame(fr, bg, tr)
+        pcall(function()
+            fr.BackgroundColor3 = bg
+            if tr ~= nil then fr.BackgroundTransparency = tr end
+            fr.BorderSizePixel = 0
+        end)
+    end
+
     for _, obj in ipairs(Library.ScreenGui:GetDescendants()) do
-        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+        -- 標題改名
+        if (obj:IsA("TextLabel") or obj:IsA("TextButton")) then
             local t = tostring(obj.Text or "")
             if t == "Lunara" or t == "Linoria" then
                 obj.Text = "河馬科技"
             end
+            pcall(function()
+                if obj.TextColor3 and obj.TextTransparency < 0.5 then
+                    local h, s, v = Color3.toHSV(obj.TextColor3)
+                    -- 偏棕舊強調色 → 青
+                    if s > 0.15 and v > 0.3 then
+                        local r, g, b = obj.TextColor3.R, obj.TextColor3.G, obj.TextColor3.B
+                        if r > 0.6 and g > 0.4 and b < 0.5 then
+                            obj.TextColor3 = C.accent
+                        end
+                    end
+                end
+            end)
         end
-    end
-    -- 自製頂欄標記
-    for _, obj in ipairs(Library.ScreenGui:GetDescendants()) do
-        if obj:IsA("Frame") and string.lower(obj.Name) == "outer" then
-            if obj:FindFirstChild("HemaShellBadge") then continue end
-            local badge = Instance.new("TextLabel")
-            badge.Name = "HemaShellBadge"
-            badge.BackgroundTransparency = 1
-            badge.Size = UDim2.new(0, 120, 0, 18)
-            badge.Position = UDim2.new(1, -130, 0, 4)
-            badge.Text = "🦛 河馬科技"
-            badge.TextSize = 12
-            badge.Font = Enum.Font.GothamBold
-            badge.TextColor3 = Color3.fromRGB(0, 220, 255)
-            badge.TextXAlignment = Enum.TextXAlignment.Right
-            badge.ZIndex = 100
-            badge.Parent = obj
-            -- 外殼邊框
-            if not obj:FindFirstChild("HemaShellStroke") then
-                local s = Instance.new("UIStroke")
-                s.Name = "HemaShellStroke"
-                s.Thickness = 1.5
-                s.Color = Color3.fromRGB(0, 180, 220)
-                s.Parent = obj
+
+        if obj:IsA("Frame") or obj:IsA("ScrollingFrame") then
+            local n = string.lower(tostring(obj.Name))
+            local ok, sz = pcall(function() return obj.AbsoluteSize end)
+            local area = (ok and sz) and (sz.X * sz.Y) or 0
+            if n == "outer" then
+                styleFrame(obj, C.bg0, 0.05)
+            elseif n == "main" or n:find("main") or area > 100000 then
+                styleFrame(obj, C.bg1, 0.08)
+            elseif area > 20000 or n:find("group") or n:find("tab") or n:find("holder") or n:find("box") then
+                styleFrame(obj, C.bg2, 0.1)
+            elseif area > 2000 then
+                styleFrame(obj, C.bg3, 0.12)
             end
         end
+    end
+
+    -- Outer 高科技外殼裝飾
+    for _, obj in ipairs(Library.ScreenGui:GetDescendants()) do
+        if obj:IsA("Frame") and string.lower(obj.Name) == "outer" then
+            -- 雙色光邊
+            local stroke = obj:FindFirstChild("HemaShellStroke")
+            if not stroke then
+                stroke = Instance.new("UIStroke")
+                stroke.Name = "HemaShellStroke"
+                stroke.Thickness = 2
+                stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+                stroke.Parent = obj
+            end
+            stroke.Color = C.line
+
+            -- 頂部科技條
+            if not obj:FindFirstChild("HemaTechBar") then
+                local bar = Instance.new("Frame")
+                bar.Name = "HemaTechBar"
+                bar.BorderSizePixel = 0
+                bar.Size = UDim2.new(1, 0, 0, 3)
+                bar.Position = UDim2.new(0, 0, 0, 0)
+                bar.BackgroundColor3 = C.line
+                bar.ZIndex = 120
+                bar.Parent = obj
+                local g = Instance.new("UIGradient")
+                g.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, C.line2),
+                    ColorSequenceKeypoint.new(0.5, C.line),
+                    ColorSequenceKeypoint.new(1, C.line2),
+                })
+                g.Parent = bar
+            end
+
+            -- 角標
+            if not obj:FindFirstChild("HemaShellBadge") then
+                local badge = Instance.new("TextLabel")
+                badge.Name = "HemaShellBadge"
+                badge.BackgroundTransparency = 1
+                badge.Size = UDim2.new(0, 140, 0, 18)
+                badge.Position = UDim2.new(1, -148, 0, 6)
+                badge.Text = "◆ 河馬科技 // SYS"
+                badge.TextSize = 11
+                badge.Font = Enum.Font.Code
+                badge.TextColor3 = C.accent
+                badge.TextXAlignment = Enum.TextXAlignment.Right
+                badge.ZIndex = 121
+                badge.Parent = obj
+            end
+
+            -- 底部狀態條
+            if not obj:FindFirstChild("HemaTechFooter") then
+                local foot = Instance.new("TextLabel")
+                foot.Name = "HemaTechFooter"
+                foot.BackgroundTransparency = 1
+                foot.Size = UDim2.new(1, -16, 0, 14)
+                foot.Position = UDim2.new(0, 8, 1, -16)
+                foot.Text = "HEMA.OS  |  SECURE CHANNEL  |  UI.REV.2"
+                foot.TextSize = 10
+                foot.Font = Enum.Font.Code
+                foot.TextColor3 = C.dim
+                foot.TextXAlignment = Enum.TextXAlignment.Left
+                foot.ZIndex = 121
+                foot.Parent = obj
+            end
+        end
+    end
+
+    -- 動態光邊（低調呼吸）
+    if not getgenv().HemaShellRGBConn then
+        local hue = 0.5
+        getgenv().HemaShellRGBConn = game:GetService("RunService").RenderStepped:Connect(function()
+            if not Library or Library.Unloaded or not Library.ScreenGui then return end
+            hue = (hue + 0.002) % 1
+            -- 青 ↔ 紫 之間擺動，比較有科技感、不會太花
+            local t = (math.sin(os.clock() * 1.2) + 1) / 2
+            local col = Color3.fromRGB(0, 200, 255):Lerp(Color3.fromRGB(140, 80, 255), t * 0.55)
+            for _, obj in ipairs(Library.ScreenGui:GetDescendants()) do
+                if obj.Name == "HemaShellStroke" or obj.Name == "HemaTechBar" then
+                    pcall(function()
+                        if obj:IsA("UIStroke") then obj.Color = col
+                        elseif obj:IsA("Frame") then obj.BackgroundColor3 = col end
+                    end)
+                end
+            end
+        end)
     end
 end
 
@@ -357,7 +478,6 @@ pcall(function()
 end)
 pcall(HemaApplyCustomShell)
 pcall(function()
-    -- 開場結束後開啟選單（相容不同 Linoria 版本）
     if type(Library.Toggle) == "function" then
         Library:Toggle()
     end
@@ -366,8 +486,10 @@ pcall(function()
     end
 end)
 task.defer(function()
-    task.wait(0.5)
+    task.wait(0.4)
     pcall(HemaApplyCustomShell)
+    task.wait(0.6)
+    pcall(HemaApplyCustomShell) -- 再套一次，吃到晚建立的分頁
 end)
 local Tabs = {
 	Combat = Window:AddTab("戰鬥"),
@@ -513,7 +635,7 @@ if not getgenv().InstanceSliderFillBound then
         end
     end)
 end
-local INSTANCE_ACCENT = Color3.fromRGB(0, 200, 255)
+local INSTANCE_ACCENT = Color3.fromRGB(0, 230, 255)
 local INSTANCE_BROWN_ACCENTS = {
     Color3.fromRGB(200, 149, 108),
     Color3.fromRGB(200, 149, 106),
@@ -3258,6 +3380,21 @@ LeftGroup:AddToggle("NoCooldown", {
     Default = false,
     Callback = function(val)
         getgenv().CombatMods.RapidFire = val
+    end
+})
+LeftGroup:AddToggle("AutoSwapSecondary", {
+    Text = "主武打完換副武",
+    Default = false,
+    Tooltip = "主武器子彈打完後自動切換到副武器",
+    Callback = function(val)
+        -- 優先寫入 rage config（若已載入）
+        pcall(function()
+            if ragebot and ragebot.config and ragebot.config.state then
+                ragebot.config.state.autoSwapSecondary = val
+                ragebot.config.state.autoSwapped = false
+            end
+        end)
+        getgenv().HemaAutoSwapSecondary = val
     end
 })
 LeftGroup:AddToggle("NoSpread", {
@@ -6150,6 +6287,8 @@ local config = {
         outofammo = false,
         csyncactive = false,
         reloadStartedAt = 0,
+        autoSwapSecondary = false,
+        autoSwapped = false,
     },
     voidhide = {
         enabled = true,
@@ -6523,6 +6662,39 @@ local function tickAmmo()
         if isSling(getweapon()) then
             config.voidspam.phase = "hide"
         end
+        -- 主武器打完子彈 → 自動換成副武器
+        if (config.state.autoSwapSecondary or getgenv().HemaAutoSwapSecondary) and not config.state.autoSwapped and not melee then
+            local lf = modules.fighter and modules.fighter.LocalFighter
+            local eq = lf and lf.EquippedItem
+            local slot = eq and whichSlot(eq) or nil
+            -- 目前是主武(1)或設定為 primary 時才換
+            local onPrimary = (slot == 1) or (config.target.weaponPick == "primary")
+            if onPrimary then
+                config.state.autoSwapped = true
+                config.target.weaponPick = "secondary"
+                pcall(function()
+                    if pressSlot then pressSlot(2) end
+                end)
+                pcall(function()
+                    local item = slotItem(2)
+                    local oid = item and item:Get("ObjectID")
+                    if oid then
+                        local rm = replicatedstorage.Remotes.Replication.Fighter.UseItem
+                        for _, en in ipairs({ "Equip", "Switch", "Select", "EquipItem" }) do
+                            local ev = modules.enums and modules.enums:ToEnum(en)
+                            if ev then
+                                pcall(function() rm:FireServer(oid, ev, nil, nil) end)
+                            end
+                        end
+                    end
+                end)
+                pcall(function()
+                    if Library and Library.Notify then
+                        Library:Notify("主武耗盡 → 已切換副武", 2)
+                    end
+                end)
+            end
+        end
     elseif not config.state.outofammo and wasOutOfAmmo then
         if config.voidspam.enabled then
             config.voidspam.phase = "shoot"
@@ -6530,6 +6702,8 @@ local function tickAmmo()
         else
             config.voidspam.phase = nil
         end
+        -- 有子彈了（例如換回主武或撿彈）允許下次再自動切
+        config.state.autoSwapped = false
     end
 end
 local function reloadHide(sling)
