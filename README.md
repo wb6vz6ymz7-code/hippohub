@@ -81,6 +81,180 @@ pcall(function()
     end
 end)
 local repo = "https://raw.githubusercontent.com/mstudio45/LinoriaLib/main/"
+
+-- ========== 河馬科技：開場河馬圖 + 自製外殼 (方案 B) ==========
+local function HemaShowSplash(duration)
+    duration = duration or 2.6
+    local ok, guiParent = pcall(function()
+        return game:GetService("CoreGui")
+    end)
+    if not ok or not guiParent then
+        guiParent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+    end
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "HemaSplash"
+    sg.IgnoreGuiInset = true
+    sg.DisplayOrder = 2147483647
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    pcall(function() sg.Parent = guiParent end)
+    if not sg.Parent then
+        sg.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+    end
+
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.fromScale(1, 1)
+    bg.BackgroundColor3 = Color3.fromRGB(8, 10, 16)
+    bg.BorderSizePixel = 0
+    bg.Parent = sg
+
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(0, 280, 0, 320)
+    card.Position = UDim2.new(0.5, -140, 0.5, -160)
+    card.BackgroundColor3 = Color3.fromRGB(18, 22, 32)
+    card.BorderSizePixel = 0
+    card.Parent = bg
+    local cc = Instance.new("UICorner")
+    cc.CornerRadius = UDim.new(0, 16)
+    cc.Parent = card
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 2
+    stroke.Color = Color3.fromRGB(0, 200, 255)
+    stroke.Parent = card
+
+    -- 河馬圖：優先用 ImageLabel（可換你的 rbxassetid）
+    local img = Instance.new("ImageLabel")
+    img.Name = "Hippo"
+    img.BackgroundTransparency = 1
+    img.Size = UDim2.new(0, 160, 0, 160)
+    img.Position = UDim2.new(0.5, -80, 0, 28)
+    img.ScaleType = Enum.ScaleType.Fit
+    -- 預設：若沒有自訂圖，用空白 + 大 emoji 文字
+    img.Image = getgenv().HemaHippoImageId or "rbxassetid://0"
+    img.Parent = card
+
+    local emoji = Instance.new("TextLabel")
+    emoji.Size = UDim2.new(1, 0, 0, 120)
+    emoji.Position = UDim2.new(0, 0, 0, 40)
+    emoji.BackgroundTransparency = 1
+    emoji.Text = "🦛"
+    emoji.TextSize = 96
+    emoji.Font = Enum.Font.GothamBold
+    emoji.TextColor3 = Color3.fromRGB(255, 255, 255)
+    emoji.Parent = card
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -20, 0, 36)
+    title.Position = UDim2.new(0, 10, 0, 200)
+    title.BackgroundTransparency = 1
+    title.Text = "河馬科技"
+    title.TextSize = 28
+    title.Font = Enum.Font.GothamBold
+    title.TextColor3 = Color3.fromRGB(0, 220, 255)
+    title.Parent = card
+
+    local sub = Instance.new("TextLabel")
+    sub.Size = UDim2.new(1, -20, 0, 24)
+    sub.Position = UDim2.new(0, 10, 0, 240)
+    sub.BackgroundTransparency = 1
+    sub.Text = "正在載入…"
+    sub.TextSize = 14
+    sub.Font = Enum.Font.Gotham
+    sub.TextColor3 = Color3.fromRGB(180, 190, 210)
+    sub.Parent = card
+
+    local barBg = Instance.new("Frame")
+    barBg.Size = UDim2.new(0.8, 0, 0, 6)
+    barBg.Position = UDim2.new(0.1, 0, 0, 280)
+    barBg.BackgroundColor3 = Color3.fromRGB(40, 44, 56)
+    barBg.BorderSizePixel = 0
+    barBg.Parent = card
+    local barC = Instance.new("UICorner")
+    barC.CornerRadius = UDim.new(1, 0)
+    barC.Parent = barBg
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(0, 0, 1, 0)
+    bar.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
+    bar.BorderSizePixel = 0
+    bar.Parent = barBg
+    local barC2 = Instance.new("UICorner")
+    barC2.CornerRadius = UDim.new(1, 0)
+    barC2.Parent = bar
+
+    -- 進度條 + RGB 邊框
+    local t0 = os.clock()
+    local hue = 0
+    local conn
+    conn = game:GetService("RunService").RenderStepped:Connect(function()
+        local p = math.clamp((os.clock() - t0) / duration, 0, 1)
+        bar.Size = UDim2.new(p, 0, 1, 0)
+        hue = (hue + 0.01) % 1
+        stroke.Color = Color3.fromHSV(hue, 0.9, 1)
+        if p >= 1 and conn then
+            conn:Disconnect()
+        end
+    end)
+
+    task.wait(duration)
+    if conn then pcall(function() conn:Disconnect() end) end
+    -- 淡出
+    for i = 0, 10 do
+        local a = i / 10
+        bg.BackgroundTransparency = a
+        card.BackgroundTransparency = a
+        emoji.TextTransparency = a
+        title.TextTransparency = a
+        sub.TextTransparency = a
+        task.wait(0.03)
+    end
+    pcall(function() sg:Destroy() end)
+end
+
+-- 載入時先跳河馬開場
+pcall(function()
+    HemaShowSplash(2.5)
+end)
+
+local function HemaApplyCustomShell()
+    if not Library or not Library.ScreenGui then return end
+    task.wait(0.3)
+    for _, obj in ipairs(Library.ScreenGui:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+            local t = tostring(obj.Text or "")
+            if t == "Lunara" or t == "Linoria" then
+                obj.Text = "河馬科技"
+            end
+        end
+    end
+    -- 自製頂欄標記
+    for _, obj in ipairs(Library.ScreenGui:GetDescendants()) do
+        if obj:IsA("Frame") and string.lower(obj.Name) == "outer" then
+            if obj:FindFirstChild("HemaShellBadge") then continue end
+            local badge = Instance.new("TextLabel")
+            badge.Name = "HemaShellBadge"
+            badge.BackgroundTransparency = 1
+            badge.Size = UDim2.new(0, 120, 0, 18)
+            badge.Position = UDim2.new(1, -130, 0, 4)
+            badge.Text = "🦛 河馬科技"
+            badge.TextSize = 12
+            badge.Font = Enum.Font.GothamBold
+            badge.TextColor3 = Color3.fromRGB(0, 220, 255)
+            badge.TextXAlignment = Enum.TextXAlignment.Right
+            badge.ZIndex = 100
+            badge.Parent = obj
+            -- 外殼邊框
+            if not obj:FindFirstChild("HemaShellStroke") then
+                local s = Instance.new("UIStroke")
+                s.Name = "HemaShellStroke"
+                s.Thickness = 1.5
+                s.Color = Color3.fromRGB(0, 180, 220)
+                s.Parent = obj
+            end
+        end
+    end
+end
+
+
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
 local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
 local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
@@ -162,7 +336,7 @@ end
 local Window = Library:CreateWindow({
 	Title = "河馬科技",
 	Center = true,
-	AutoShow = true,
+	AutoShow = false,
 	Resizable = true,
 	ShowCustomCursor = false,
 	UnlockMouseWhileOpen = true,
@@ -170,16 +344,30 @@ local Window = Library:CreateWindow({
 	TabPadding = 8,
 	MenuFadeTime = 0.2
 })
--- 強制標題列文字
+-- 強制標題列文字 + 自製外殼 + 顯示視窗
 pcall(function()
     if Window.SetTitle then Window:SetTitle("河馬科技") end
-    if Library.Window then
+    if Library.ScreenGui then
         for _, obj in ipairs(Library.ScreenGui:GetDescendants()) do
             if obj:IsA("TextLabel") and (obj.Text == "Lunara" or obj.Name == "Title" or obj.Name == "WindowTitle") then
                 obj.Text = "河馬科技"
             end
         end
     end
+end)
+pcall(HemaApplyCustomShell)
+pcall(function()
+    -- 開場結束後開啟選單（相容不同 Linoria 版本）
+    if type(Library.Toggle) == "function" then
+        Library:Toggle()
+    end
+    if Library.Toggled == false and type(Library.Toggle) == "function" then
+        Library:Toggle()
+    end
+end)
+task.defer(function()
+    task.wait(0.5)
+    pcall(HemaApplyCustomShell)
 end)
 local Tabs = {
 	Combat = Window:AddTab("戰鬥"),
