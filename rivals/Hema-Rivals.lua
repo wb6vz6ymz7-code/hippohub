@@ -1,6 +1,6 @@
 --[[
   Noir Hub · Rivals | Black & White
-  VERSION: 2026.08.25-noir-elo-spoof
+  VERSION: 2026.08.25-noir-mousefix
   1) 啟動跑戰鬥核心
   2) 自動載入 Linoria 並建立選單
   3) RightShift 開關選單
@@ -12,7 +12,7 @@ print("[Noir Hub] ========== FILE EXECUTING ==========")
 print("[HEMA] if you see this, Delta ran the file")
 
 
-local HEMA_VERSION = "2026.08.25-noir-elo-spoof"
+local HEMA_VERSION = "2026.08.25-noir-mousefix"
 if type(getgenv) ~= "function" then
 	warn("[HEMA] getgenv missing — executor incomplete")
 end
@@ -3203,57 +3203,59 @@ local function clearGuiModal()
 	end)
 end
 
--- Modal 解鎖：FPS 遊戲必須用 Gui Modal 才能真正解放系統滑鼠
+-- Modal 解鎖：開選單解放滑鼠；關選單交還 FPS 鎖定
 local modalGui, modalBtn = nil, nil
 
 local function ensureModalUnlock()
 	pcall(function()
-		if modalGui and modalGui.Parent then return end
+		if modalGui and modalGui.Parent and modalBtn and modalBtn.Parent then
+			modalBtn.Modal = true
+			modalBtn.Active = true
+			return
+		end
 		local parent = nil
 		pcall(function()
 			if gethui then parent = gethui() end
 		end)
 		if not parent then
-			parent = game:GetService("CoreGui")
+			pcall(function() parent = game:GetService("CoreGui") end)
 		end
-		pcall(function()
-			if not parent then
-				parent = lp:WaitForChild("PlayerGui", 2)
-			end
-		end)
+		if not parent then
+			parent = lp:FindFirstChild("PlayerGui") or lp:WaitForChild("PlayerGui", 2)
+		end
 		if not parent then return end
+
+		if modalGui then pcall(function() modalGui:Destroy() end) end
 		modalGui = Instance.new("ScreenGui")
-		modalGui.Name = "HemaMouseUnlock"
+		modalGui.Name = "NoirMouseUnlock"
 		modalGui.ResetOnSpawn = false
 		modalGui.IgnoreGuiInset = true
-		modalGui.DisplayOrder = 999999
+		modalGui.DisplayOrder = 100 -- 低於多數選單，避免擋點擊
 		modalGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 		pcall(function() modalGui.Parent = parent end)
 		if not modalGui.Parent then
 			modalGui.Parent = lp:FindFirstChild("PlayerGui") or parent
 		end
-		-- 幾乎全螢幕透明 Modal（Active 才能解鎖）
+
+		-- Modal=true 即可解鎖；尺寸極小，不擋住 Linoria 點擊
 		modalBtn = Instance.new("TextButton")
 		modalBtn.Name = "ModalUnlock"
 		modalBtn.BackgroundTransparency = 1
 		modalBtn.Text = ""
-		modalBtn.Size = UDim2.fromScale(1, 1)
-		modalBtn.Position = UDim2.fromScale(0, 0)
+		modalBtn.Size = UDim2.fromOffset(0, 0)
+		modalBtn.Position = UDim2.fromOffset(0, 0)
 		modalBtn.ZIndex = 0
 		modalBtn.AutoButtonColor = false
 		modalBtn.Modal = true
 		modalBtn.Active = true
 		modalBtn.Selectable = false
 		modalBtn.Parent = modalGui
-		-- 不攔截點擊：讓點擊穿透到下方 Linoria（Roblox 無真正穿透，縮小中間洞）
-		-- 改用四邊細條 + 中心不擋：用極小 Modal 點即可解鎖
-		modalBtn.Size = UDim2.fromOffset(1, 1)
-		modalBtn.Position = UDim2.fromOffset(0, 0)
 	end)
 end
 
 local function destroyModalUnlock()
 	pcall(function()
+		if modalBtn then modalBtn.Modal = false end
 		if modalGui then modalGui:Destroy() end
 	end)
 	modalGui, modalBtn = nil, nil
@@ -3261,7 +3263,9 @@ end
 
 local function freeMouse()
 	pcall(function()
-		if Library then Library.ShowCustomCursor = false end
+		if Library then
+			Library.ShowCustomCursor = false
+		end
 		ensureModalUnlock()
 		if modalBtn then
 			modalBtn.Modal = true
@@ -3272,13 +3276,30 @@ local function freeMouse()
 		pcall(function()
 			UIS.OverrideMouseIconBehavior = Enum.OverrideMouseIconBehavior.None
 		end)
-		-- 強制顯示預設游標圖示
 		pcall(function()
 			local mouse = lp:GetMouse()
-			if mouse then
-				mouse.Icon = ""
-			end
+			if mouse then mouse.Icon = "" end
 		end)
+	end)
+end
+
+local function lockMouseFPS()
+	pcall(function()
+		destroyModalUnlock()
+		clearGuiModal()
+		-- 關閉選單後交還射擊遊戲滑鼠鎖定
+		UIS.MouseBehavior = Enum.MouseBehavior.LockCenter
+		UIS.MouseIconEnabled = false
+		pcall(function()
+			UIS.OverrideMouseIconBehavior = Enum.OverrideMouseIconBehavior.None
+		end)
+		local cam = workspace.CurrentCamera
+		local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
+		if cam and hum then
+			cam.CameraType = Enum.CameraType.Custom
+			cam.CameraSubject = hum
+		end
+		if hum then hum.AutoRotate = true end
 	end)
 end
 
@@ -3291,34 +3312,12 @@ local function releaseMenuMouse()
 	pcall(function()
 		if Library then Library.ShowCustomCursor = false end
 	end)
-	destroyModalUnlock()
-	clearGuiModal()
-	local function unlockFree()
-		if menuOpenWanted then return end
-		pcall(function()
-			UIS.OverrideMouseIconBehavior = Enum.OverrideMouseIconBehavior.None
-			UIS.MouseBehavior = Enum.MouseBehavior.Default
-			UIS.MouseIconEnabled = true
-		end)
-	end
-	unlockFree()
-	task.defer(unlockFree)
-	task.delay(0.05, unlockFree)
-	task.delay(0.15, function()
-		unlockFree()
-		clearGuiModal()
-		pcall(function()
-			local cam = workspace.CurrentCamera
-			local hum = lp.Character and lp.Character:FindFirstChildOfClass("Humanoid")
-			if cam and hum then
-				cam.CameraType = Enum.CameraType.Custom
-				cam.CameraSubject = hum
-			end
-			if hum then
-				hum.AutoRotate = true
-			end
-		end)
-	end)
+	-- 分幾次上鎖，避免被遊戲/庫瞬間改回
+	lockMouseFPS()
+	task.defer(lockMouseFPS)
+	task.delay(0.05, lockMouseFPS)
+	task.delay(0.15, lockMouseFPS)
+	task.delay(0.35, lockMouseFPS)
 end
 
 local function startMenuMouseUnlock()
@@ -3328,30 +3327,36 @@ local function startMenuMouseUnlock()
 		pcall(function() menuMouseConn:Disconnect() end)
 		menuMouseConn = nil
 	end
-	menuMouseConn = RunService.RenderStepped:Connect(function()
+	-- 不要每幀硬搶；只在被改回鎖定時再解放
+	menuMouseConn = RunService.Heartbeat:Connect(function()
 		if not menuOpenWanted then return end
 		pcall(function()
 			if Library then Library.ShowCustomCursor = false end
-			if not modalGui or not modalGui.Parent then
+			if not modalGui or not modalGui.Parent or not modalBtn or not modalBtn.Parent then
 				ensureModalUnlock()
-			end
-			if modalBtn then
+			elseif modalBtn and not modalBtn.Modal then
 				modalBtn.Modal = true
 			end
-			UIS.MouseBehavior = Enum.MouseBehavior.Default
-			UIS.MouseIconEnabled = true
+			if UIS.MouseBehavior ~= Enum.MouseBehavior.Default then
+				UIS.MouseBehavior = Enum.MouseBehavior.Default
+			end
+			if not UIS.MouseIconEnabled then
+				UIS.MouseIconEnabled = true
+			end
 		end)
 	end)
-	for _, d in ipairs({ 0, 0.03, 0.08, 0.15, 0.3, 0.5 }) do
+	for _, d in ipairs({ 0, 0.05, 0.12, 0.25 }) do
 		task.delay(d, function()
 			if menuOpenWanted then freeMouse() end
 		end)
 	end
-	print("[HEMA] 系統滑鼠解鎖 (Modal)")
+	print("[HEMA] 系統滑鼠解鎖")
 end
 
 local function stopMenuMouseUnlock()
 	releaseMenuMouse()
+end
+
 end
 
 
@@ -4876,21 +4881,22 @@ end)
 
 
 -- 選單開啟時維持系統滑鼠可見、可移動（在 boot 內已處理；此處僅備援）
+-- 備援：同步 Library.Toggled 與滑鼠狀態（避免開關不同步）
 task.spawn(function()
+	local wasToggled = false
 	while true do
-		task.wait(0.15)
-		local ok, cfg = pcall(function() return CFG end)
-		if not ok or not cfg or not cfg.Running then
-			task.wait(1)
-		else
-			pcall(function()
-				if Library and Library.Toggled then
-					Library.ShowCustomCursor = false
-					local u = game:GetService("UserInputService")
-					u.MouseIconEnabled = true
-					u.MouseBehavior = Enum.MouseBehavior.Default
-				end
-			end)
-		end
+		task.wait(0.2)
+		pcall(function()
+			if not Library then return end
+			local on = Library.Toggled == true
+			if on and not wasToggled then
+				menuOpenWanted = true
+				if startMenuMouseUnlock then startMenuMouseUnlock() end
+			elseif (not on) and wasToggled then
+				menuOpenWanted = false
+				if stopMenuMouseUnlock then stopMenuMouseUnlock() end
+			end
+			wasToggled = on
+		end)
 	end
 end)
