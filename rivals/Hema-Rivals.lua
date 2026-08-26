@@ -1,6 +1,6 @@
 --[[
-  河馬科技 · Rivals | Linoria 完整功能 + 防卡
-  VERSION: 2026.08.25-r15
+  Noir Hub · Rivals | Black & White
+  VERSION: 2026.08.25-noir-elo-spoof
   1) 啟動跑戰鬥核心
   2) 自動載入 Linoria 並建立選單
   3) RightShift 開關選單
@@ -8,11 +8,11 @@
   5) 隊友檢查：Lunara 多層（Team/Attr/Character）
 ]]
 -- HEMA Rivals boot
-print("[HEMA] ========== FILE EXECUTING ==========")
+print("[Noir Hub] ========== FILE EXECUTING ==========")
 print("[HEMA] if you see this, Delta ran the file")
 
 
-local HEMA_VERSION = "2026.08.25-r15"
+local HEMA_VERSION = "2026.08.25-noir-elo-spoof"
 if type(getgenv) ~= "function" then
 	warn("[HEMA] getgenv missing — executor incomplete")
 end
@@ -108,11 +108,11 @@ local CFG = {
 	AntiKatanaStrict = true,
 	FOV = 200, ShowFOV = false, Smooth = 0.25, MaxDist = 300,
 	Part = "Head", PixelY = 0, PixelX = 0,
-	HitChance = 100, FireRate = 0.06, AutoSwap = false,
+	HitChance = 100, FireRate = 0.05, AutoSwap = false,
 	TargetMode = "FOV",
-	SoftMode = true,
-	SoftFireRate = 0.18,
-	SoftHitChance = 55,
+	SoftMode = false, -- Lunara 預設不鎖速
+	SoftFireRate = 0.05,
+	SoftHitChance = 100,
 	Hitmarker = false,
 	ShowStats = false,
 	EspName = false, EspDist = false, EspChams = false, EspHp = false,
@@ -132,10 +132,30 @@ local CFG = {
 	NoFlash = false, NoSmoke = false, HitSound = false,
 	HitSoundId = "rbxassetid://5043539486", HitSoundVol = 1,
 	HitSoundName = "Rust HS",
+	-- Lunara Profile（等級 / 連勝，僅本地視覺）
+	LevelSpoof = false,
+	LevelValue = 9999,
+	WinStreakSpoof = false,
+	WinStreakValue = 9999,
+	FakeRankOn = false,
+	DisplayELO = 2400, -- Diamond I 門檻
+	FakeRankPreset = "Diamond I",
+	NameSpoof = false,
+	NameSpoofValue = "hi",
+	NameSpoofVerified = false,
+	NameSpoofPremium = false,
+	DeviceSpoof = false,
+	DeviceType = "Console",
+	RapidFire = false,
+	NoSpread = false,
+	NoRecoil = false,
+	MaxAccuracy = false,
+	ShowSilentFOV = false,
+	HitChance = 100,
 	SkyOn = false, SkyName = "Nebula",
 	GunChams = false, ArmChams = false, HideArms = false,
-	GunChamsColor = Color3.fromRGB(180, 100, 255),
-	ArmChamsColor = Color3.fromRGB(100, 180, 255),
+	GunChamsColor = Color3.fromRGB(255, 255, 255),
+	ArmChamsColor = Color3.fromRGB(220, 220, 220),
 	LightingBright = 2, ClockTime = 14,
 	FogStart = 0, FogEnd = 1e6,
 	BloomOn = false, CCOn = false, CCSat = 0.2, CCBright = 0.05,
@@ -176,7 +196,7 @@ local CFG = {
 	AntiVoidMaxDist = 280, -- 離安全點水平過遠也拉回
 	AntiVoidCheckMap = true, -- 偵測 Void/Kill 零件與腳下無地
 
-	RageFireRate = 0.05, -- Lunara 風格高攻速（越小越快）
+	RageFireRate = 0.03, -- Lunara 風格高攻速（越小越快）
 	RageHitChance = 100,
 	RageAutoSwap = true, -- 子彈打完自動換下一把（僅 Rage）
 	-- 語言
@@ -409,73 +429,25 @@ task.spawn(function()
 	end
 end)
 
+-- ===== Lunara 戰鬥：隊友判定（TeamID）=====
+local function isteammate(targetplayer)
+	if not targetplayer then return false end
+	return lp:GetAttribute("TeamID") == targetplayer:GetAttribute("TeamID")
+end
+local function checkteammate(player)
+	if not player or player == lp then return true end
+	local myTeam = lp:GetAttribute("TeamID")
+	local theirTeam = player:GetAttribute("TeamID")
+	if myTeam ~= nil and theirTeam ~= nil then
+		return myTeam == theirTeam
+	end
+	return lp.Team and player.Team and lp.Team == player.Team
+end
 local function sameTeam(plr)
-	-- Lunara 風格多層隊友判定
 	if not plr or plr == lp then return true end
-	local ok, res = pcall(function()
-		-- 1) Roblox Team / TeamColor
-		if lp.Team ~= nil and plr.Team ~= nil and lp.Team == plr.Team then
-			return true
-		end
-		if lp.TeamColor and plr.TeamColor and lp.TeamColor == plr.TeamColor then
-			-- 僅在場上真的有 ≥2 隊時才用 TeamColor（避免 FFA 全員同色）
-			local seen, n = {}, 0
-			for _, p in ipairs(Players:GetPlayers()) do
-				if p.Team and not seen[p.Team] then
-					seen[p.Team] = true
-					n = n + 1
-				end
-			end
-			if n >= 2 then return true end
-		end
-		-- 2) Player / Character Attributes
-		local keys = {
-			"Team", "TeamId", "TeamID", "TeamName", "Faction", "Side",
-			"Party", "Squad", "Alliance", "Group", "Crew", "Ally",
-		}
-		for _, key in ipairs(keys) do
-			local a = lp:GetAttribute(key)
-			local b = plr:GetAttribute(key)
-			if a ~= nil and b ~= nil and tostring(a) == tostring(b) then
-				return true
-			end
-			local ca = lp.Character and lp.Character:GetAttribute(key)
-			local cb = plr.Character and plr.Character:GetAttribute(key)
-			if ca ~= nil and cb ~= nil and tostring(ca) == tostring(cb) then
-				return true
-			end
-		end
-		-- 3) Player children String/Int values
-		for _, child in ipairs(lp:GetChildren()) do
-			if child:IsA("StringValue") or child:IsA("IntValue") or child:IsA("NumberValue") or child:IsA("BoolValue") then
-				local n = string.lower(child.Name)
-				if n:find("team") or n:find("side") or n:find("faction") or n:find("party") or n:find("squad") then
-					local other = plr:FindFirstChild(child.Name)
-					if other and other.Value == child.Value then
-						return true
-					end
-				end
-			end
-		end
-		-- 4) Character folder values
-		local function charTeamVal(p)
-			local c = p.Character
-			if not c then return nil end
-			for _, name in ipairs({ "Team", "TeamId", "Faction", "Side" }) do
-				local o = c:FindFirstChild(name)
-				if o and (o:IsA("StringValue") or o:IsA("IntValue") or o:IsA("NumberValue")) then
-					return o.Value
-				end
-			end
-			return nil
-		end
-		local va, vb = charTeamVal(lp), charTeamVal(plr)
-		if va ~= nil and vb ~= nil and va == vb then
-			return true
-		end
-		return false
-	end)
-	return ok and res == true
+	if checkteammate(plr) then return true end
+	if isteammate(plr) then return true end
+	return false
 end
 
 local function isEnemy(plr)
@@ -514,37 +486,81 @@ local function visible(part)
 	return hit.Instance and part.Parent and hit.Instance:IsDescendantOf(part.Parent)
 end
 
+local function worldToScreen(pos)
+	local cam = workspace.CurrentCamera
+	if not cam then return nil, false end
+	local v, on = cam:WorldToViewportPoint(pos)
+	if not on or v.Z <= 0 then return nil, false end
+	return Vector2.new(v.X, v.Y), true
+end
+
+local function hitpartfromname(char, partName)
+	if not char then return nil end
+	local function fc(n) return char:FindFirstChild(n) end
+	partName = partName or CFG.Part or "Head"
+	if partName == "Head" or partName == "頭部" then
+		return fc("Head") or fc("頭部")
+	elseif partName == "HumanoidRootPart" then
+		return fc("HumanoidRootPart")
+	elseif partName == "UpperTorso" or partName == "Torso" then
+		return fc("UpperTorso") or fc("Torso")
+	elseif partName == "LowerTorso" then
+		return fc("LowerTorso")
+	elseif partName == "Closest" then
+		local cam = workspace.CurrentCamera
+		if not cam then return fc("Head") or fc("HumanoidRootPart") end
+		local camPos, camLook = cam.CFrame.Position, cam.CFrame.LookVector
+		local best, bestD = nil, math.huge
+		for _, part in ipairs(char:GetChildren()) do
+			if part:IsA("BasePart") then
+				local dir = part.Position - camPos
+				if dir.Magnitude > 0.05 then
+					local d = 1 - camLook:Dot(dir.Unit)
+					if d < bestD then bestD, best = d, part end
+				end
+			end
+		end
+		return best or fc("Head") or fc("HumanoidRootPart")
+	end
+	return fc(partName) or fc("Head") or fc("HumanoidRootPart")
+end
+
+local function lunaraValidChar(char)
+	if not char or not char.Parent then return false end
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then return false end
+	if not char:FindFirstChild("HumanoidRootPart") then return false end
+	local targetplayer = Players:GetPlayerFromCharacter(char)
+	if not targetplayer then return false end
+	if CFG.TeamCheck and sameTeam(targetplayer) then return false end
+	if CFG.AntiKatana and katanausers and katanausers[targetplayer] then return false end
+	return true
+end
+
+-- Lunara closestplayerinfov
 local function getTarget()
 	local cam = workspace.CurrentCamera
 	if not cam then return nil end
+	local center = Vector2.new(cam.ViewportSize.X * 0.5, cam.ViewportSize.Y * 0.5)
+	local mouse = UIS:GetMouseLocation()
+	if mouse then center = Vector2.new(mouse.X, mouse.Y) end
+	local maxFov = CFG.FOV or 200
+	local best, bestD = nil, maxFov
 	local me = hrp()
-	local mode = CFG.TargetMode or "FOV"
-	local best, bestScore = nil, nil
-	local center = cam.ViewportSize * 0.5
+	local maxDist = CFG.MaxDist or 300
 	for _, plr in ipairs(Players:GetPlayers()) do
-		if isEnemy(plr) and not isKatanaDeflecting(plr) then
-			local ch = plr.Character
-			local hum = ch and ch:FindFirstChildOfClass("Humanoid")
-			if hum and hum.Health > 0 then
-				local part = partOf(plr)
-				if part and visible(part) then
-					local d3 = me and (part.Position - me.Position).Magnitude or 0
-					if d3 <= (CFG.MaxDist or 300) then
-						local sp, on = cam:WorldToViewportPoint(part.Position)
-						if on and sp.Z > 0 then
-							local fovD = (Vector2.new(sp.X, sp.Y) - center).Magnitude
-							if fovD <= (CFG.FOV or 200) then
-								local score
-								if mode == "LowHP" then
-									score = hum.Health -- 越小越好
-								elseif mode == "Closest" then
-									score = d3
-								else
-									score = fovD -- FOV：越靠準星越好
-								end
-								if bestScore == nil or score < bestScore then
-									bestScore, best = score, part
-								end
+		if plr ~= lp and plr.Character and lunaraValidChar(plr.Character) then
+			local part = hitpartfromname(plr.Character, CFG.Part)
+			if part then
+				if me and (part.Position - me.Position).Magnitude > maxDist then
+					-- skip far
+				else
+					if visible(part) then
+						local sp, on = worldToScreen(part.Position)
+						if on and sp then
+							local d = (sp - center).Magnitude
+							if d <= bestD then
+								bestD, best = d, part
 							end
 						end
 					end
@@ -555,7 +571,7 @@ local function getTarget()
 	return best
 end
 
-local UseItem, Utility, EnumLibrary, FighterCtrl
+
 local function ensureMods()
 	pcall(function() UseItem = RS.Remotes.Replication.Fighter.UseItem end)
 	pcall(function()
@@ -688,20 +704,27 @@ local lastFire = 0
 local lastSilentPart, lastSilentAt = nil, 0
 local STATS = { Damage = 0, Kills = 0, Hits = 0 }
 local hpWatch = {}
+-- Lunara firesilent
 local function trySilent(part, forceRage)
 	if not part then return end
 	if not forceRage then
 		if not CFG.SilentAuto and not (CFG.Silent and holdLMB()) then return end
 	end
+	-- 隊友二次檢查（Lunara valid）
+	local model = part:FindFirstAncestorOfClass("Model")
+	local tplr = model and Players:GetPlayerFromCharacter(model)
+	if tplr and CFG.TeamCheck and sameTeam(tplr) then return end
+	if CFG.AntiKatana and tplr and katanausers and katanausers[tplr] then return end
+
 	local chance = CFG.HitChance or 100
-	local rate = CFG.FireRate or 0.06
-	-- Ragebot：Lunara 高攻速，不套 SoftMode 限速
+	local rate = CFG.FireRate or 0.05
+	if CFG.RapidFire then rate = math.min(rate, 0.02) end
 	if forceRage or CFG.RageOn then
 		chance = CFG.RageHitChance or 100
 		rate = CFG.RageFireRate or 0.03
 	elseif CFG.SoftMode then
-		chance = math.min(chance, CFG.SoftHitChance or 70)
-		rate = math.max(rate, CFG.SoftFireRate or 0.12)
+		chance = math.min(chance, CFG.SoftHitChance or 100)
+		rate = math.max(rate, CFG.SoftFireRate or 0.05)
 	end
 	if math.random(1, 100) > chance then return end
 	local now = tick()
@@ -710,30 +733,53 @@ local function trySilent(part, forceRage)
 	if not UseItem then return end
 	local root = hrp()
 	if not root then return end
+
+	-- Lunara：ObjectID from LocalFighter.EquippedItem
+	local objId = getObjectId and getObjectId() or nil
+	if not objId then
+		pcall(function()
+			if FighterCtrl and FighterCtrl.LocalFighter and FighterCtrl.LocalFighter.EquippedItem then
+				objId = FighterCtrl.LocalFighter.EquippedItem:Get("ObjectID")
+			end
+		end)
+	end
+
 	lastFire = now
-	local look = CFrame.new(root.Position, part.Position)
+	local shootPos = root.Position
+	local targetPos = part.Position
 	local action = "StartShooting"
 	pcall(function()
-		if EnumLibrary and EnumLibrary.ToEnum then action = EnumLibrary:ToEnum("StartShooting") end
+		if EnumLibrary and EnumLibrary.ToEnum then
+			action = EnumLibrary:ToEnum("StartShooting")
+		end
 	end)
 	local data
 	if Utility and Utility.EncodeCFrame then
 		data = {
 			[utf8.char(1)] = {
-				[utf8.char(0)] = Utility:EncodeCFrame(look),
-				[utf8.char(1)] = Utility:EncodeCFrame(look),
+				[utf8.char(0)] = Utility:EncodeCFrame(CFrame.new(shootPos, targetPos)),
+				[utf8.char(1)] = Utility:EncodeCFrame(CFrame.new(shootPos, targetPos)),
 				[utf8.char(2)] = part,
 				[utf8.char(3)] = Utility:EncodeCFrame(CFrame.new(0.43, 0.25, 0.42)),
 			},
 		}
 	else
-		data = { [utf8.char(1)] = { [utf8.char(0)] = look, [utf8.char(1)] = look, [utf8.char(2)] = part } }
+		local look = CFrame.new(shootPos, targetPos)
+		data = {
+			[utf8.char(1)] = {
+				[utf8.char(0)] = look,
+				[utf8.char(1)] = look,
+				[utf8.char(2)] = part,
+			},
+		}
 	end
-	pcall(function() UseItem:FireServer(getObjectId(), action, data, nil) end)
-	-- 記錄最近 silent 目標（打擊音只在「我有開火」後血量下降才響）
+	pcall(function()
+		UseItem:FireServer(objId, action, data, nil)
+	end)
 	lastSilentPart = part
 	lastSilentAt = now
 end
+
 
 -- Hitmarker + 傷害／擊殺計數
 local hitmarkerGui, hitmarkerFrame, statsLabel
@@ -929,7 +975,7 @@ pcall(function()
 	if not parent then pcall(function() parent = game:GetService("CoreGui") end) end
 	if not parent then parent = lp:WaitForChild("PlayerGui", 5) end
 	fovGui.Parent = parent
-	aimFovRing = makeFovRing(fovGui, "AimFOV", Color3.fromRGB(180, 100, 255))
+	aimFovRing = makeFovRing(fovGui, "AimFOV", Color3.fromRGB(255, 255, 255))
 	silentFovRing = makeFovRing(fovGui, "SilentFOV", Color3.fromRGB(100, 220, 255))
 end)
 local function setFovRing(ring, show, radius)
@@ -1756,15 +1802,15 @@ RunService.RenderStepped:Connect(function()
 	end
 
 
-	if need and now - lastT > 0.15 then
-		lastT = now
+	-- Lunara：戰鬥每幀取目標（不節流），更跟手
+	if need then
 		cached = getTarget()
-	elseif not need then
+		lastT = now
+	else
 		cached = nil
 	end
 	local t = cached
 	if CFG.AimOn and holdRMB() and t then aimAt(t) end
-	if holdLMB() then lastFire = tick() end
 	if (CFG.Silent or CFG.SilentAuto) and t then trySilent(t) end
 	if CFG.Triggerbot and t and holdLMB() then trySilent(t) end
 
@@ -2046,11 +2092,11 @@ task.spawn(function()
 								p.LocalTransparencyModifier = 1
 							elseif isArm and CFG.ArmChams then
 								p.Material = Enum.Material.ForceField
-								p.Color = CFG.ArmChamsColor or Color3.fromRGB(100, 180, 255)
+								p.Color = CFG.ArmChamsColor or Color3.fromRGB(220, 220, 220)
 								p.LocalTransparencyModifier = 0
 							elseif CFG.GunChams and not isArm then
 								p.Material = Enum.Material.ForceField
-								p.Color = CFG.GunChamsColor or Color3.fromRGB(180, 100, 255)
+								p.Color = CFG.GunChamsColor or Color3.fromRGB(255, 255, 255)
 							end
 						end
 					end
@@ -3351,12 +3397,12 @@ local function showBoot(msg)
 		card.AnchorPoint = Vector2.new(0.5, 0)
 		card.Position = UDim2.new(0.5, 0, 0, 40)
 		card.Size = UDim2.fromOffset(260, 48)
-		card.BackgroundColor3 = Color3.fromRGB(18, 16, 26)
+		card.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
 		card.BorderSizePixel = 0
 		card.Parent = bootGui
 		Instance.new("UICorner", card).CornerRadius = UDim.new(0, 6)
 		local st = Instance.new("UIStroke", card)
-		st.Color = Color3.fromRGB(120, 80, 200)
+		st.Color = Color3.fromRGB(255, 255, 255)
 		st.Thickness = 1
 		local lab = Instance.new("TextLabel")
 		lab.Name = "Lab"
@@ -3364,7 +3410,7 @@ local function showBoot(msg)
 		lab.BackgroundTransparency = 1
 		lab.Font = Enum.Font.Gotham
 		lab.TextSize = 14
-		lab.TextColor3 = Color3.fromRGB(220, 210, 255)
+		lab.TextColor3 = Color3.fromRGB(245, 245, 245)
 		lab.Text = msg or "Loading..."
 		lab.Parent = card
 	end)
@@ -3391,13 +3437,378 @@ local function buildUI()
 	showBoot(L("建立選單中…", "Building menu…"))
 	print("[HEMA] 分批建立選單…")
 
-	print("[HEMA] CreateWindow…")
+
+
+
+-- ===================== Lunara 名稱 / 徽章 / 頭上顯示 =====================
+local lastSpoofName = ""
+local nameSpoofBusy = false
+local headNameBillboard = nil
+
+local function clearbadges(str)
+	if type(str) ~= "string" then return "" end
+	return str:gsub(utf8.char(0xE000), ""):gsub(utf8.char(0xE001), "")
+end
+local function escapePattern(str)
+	return tostring(str):gsub("([^%w])", "%%%1")
+end
+local function buildSpoofName()
+	local base = clearbadges(CFG.NameSpoofValue or "hi")
+	local badge = (CFG.NameSpoofPremium and utf8.char(0xE001) or "")
+		.. (CFG.NameSpoofVerified and utf8.char(0xE000) or "")
+	return base .. badge
+end
+
+-- 掃任意容器內文字，把本名 / 舊假名換成新假名
+local function replaceNameInContainer(root, realName, oldSpoof, newSpoof)
+	if not root then return end
+	for _, d in ipairs(root:GetDescendants()) do
+		if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+			local t = d.Text
+			if type(t) == "string" and t ~= "" then
+				local nt = t
+				if realName and realName ~= "" and nt:find(realName, 1, true) then
+					nt = nt:gsub(escapePattern(realName), newSpoof)
+				end
+				if oldSpoof and oldSpoof ~= "" and oldSpoof ~= newSpoof and nt:find(oldSpoof, 1, true) then
+					nt = nt:gsub(escapePattern(oldSpoof), newSpoof)
+				end
+				-- DisplayName 也可能出現在名牌
+				local dn = lp.DisplayName
+				if dn and dn ~= "" and dn ~= realName and nt:find(dn, 1, true) then
+					nt = nt:gsub(escapePattern(dn), newSpoof)
+				end
+				if nt ~= t then
+					pcall(function() d.Text = nt end)
+				end
+			end
+		end
+	end
+end
+
+-- 自建頭上名牌（遊戲若用自訂 Billboard 蓋住 Humanoid 名）
+local function ensureHeadNameplate(char, text)
+	char = char or lp.Character
+	if not char then return end
+	local head = char:FindFirstChild("Head")
+	if not head then return end
+	local bb = head:FindFirstChild("NoirNameSpoof")
+	if not bb then
+		bb = Instance.new("BillboardGui")
+		bb.Name = "NoirNameSpoof"
+		bb.Size = UDim2.fromOffset(220, 28)
+		bb.StudsOffset = Vector3.new(0, 2.2, 0)
+		bb.AlwaysOnTop = true
+		bb.MaxDistance = 150
+		bb.Parent = head
+		local lab = Instance.new("TextLabel")
+		lab.Name = "Name"
+		lab.BackgroundTransparency = 1
+		lab.Size = UDim2.fromScale(1, 1)
+		lab.Font = Enum.Font.GothamBold
+		lab.TextSize = 14
+		lab.TextStrokeTransparency = 0.4
+		lab.TextColor3 = Color3.fromRGB(255, 255, 255)
+		lab.Parent = bb
+	end
+	local lab = bb:FindFirstChild("Name")
+	if lab then lab.Text = tostring(text) end
+	headNameBillboard = bb
+end
+
+local function destroyHeadNameplate()
+	pcall(function()
+		local ch = lp.Character
+		local head = ch and ch:FindFirstChild("Head")
+		local bb = head and head:FindFirstChild("NoirNameSpoof")
+		if bb then bb:Destroy() end
+	end)
+	headNameBillboard = nil
+end
+
+local function applyNameSpoof(char)
+	if not CFG.NameSpoof then
+		destroyHeadNameplate()
+		return
+	end
+	char = char or lp.Character
+	if not char then return end
+	local spoof = buildSpoofName()
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		pcall(function()
+			hum.DisplayName = spoof
+			-- 強制刷新預設名牌
+			local old = hum.DisplayDistanceType
+			hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+			task.defer(function()
+				pcall(function()
+					hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
+				end)
+			end)
+		end)
+	end
+	-- 角色內所有 Billboard / 文字
+	replaceNameInContainer(char, lp.Name, lastSpoofName, spoof)
+	-- PlayerGui（排行榜/個人檔案）
+	replaceNameInContainer(lp:FindFirstChild("PlayerGui"), lp.Name, lastSpoofName, spoof)
+	-- CoreGui 部分榜單
+	pcall(function()
+		replaceNameInContainer(game:GetService("CoreGui"), lp.Name, lastSpoofName, spoof)
+	end)
+	-- 頭上自建名牌（保證一定看得到）
+	ensureHeadNameplate(char, spoof)
+	lastSpoofName = spoof
+end
+
+local function refreshNameSpoofLabels()
+	if not CFG.NameSpoof or nameSpoofBusy then return end
+	nameSpoofBusy = true
+	pcall(applyNameSpoof, lp.Character)
+	nameSpoofBusy = false
+end
+
+-- 新 TextLabel 出現時即時改
+pcall(function()
+	local function hookDesc(parent)
+		if not parent then return end
+		parent.DescendantAdded:Connect(function(d)
+			if not CFG.NameSpoof then return end
+			if not (d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox")) then return end
+			task.defer(function()
+				local spoof = buildSpoofName()
+				local t = d.Text
+				if type(t) ~= "string" then return end
+				if t:find(lp.Name, 1, true) then
+					pcall(function() d.Text = t:gsub(escapePattern(lp.Name), spoof) end)
+				elseif lastSpoofName ~= "" and t:find(lastSpoofName, 1, true) then
+					pcall(function() d.Text = t:gsub(escapePattern(lastSpoofName), spoof) end)
+				end
+			end)
+		end)
+	end
+	hookDesc(lp:FindFirstChild("PlayerGui") or lp:WaitForChild("PlayerGui", 5))
+	if lp.Character then hookDesc(lp.Character) end
+	lp.CharacterAdded:Connect(function(c)
+		hookDesc(c)
+		task.wait(0.4)
+		if CFG.NameSpoof then applyNameSpoof(c) end
+	end)
+end)
+
+task.spawn(function()
+	while task.wait(0.35) do
+		if getgenv().HEMA_KILL then break end
+		if CFG.NameSpoof then pcall(refreshNameSpoofLabels) end
+	end
+end)
+
+-- ===================== Rivals 真實假段位：DisplayELO / Level / WinStreak =====================
+-- 參考社群腳本寫法（非 Billboard 標籤）：
+--   SetAttribute("DisplayELO", elo)
+--   SetAttribute("Level", level)
+--   SetAttribute("StatisticDuelsWinStreak", streak)
+--   CustomLeaderstats.Level / "Win Streak"
+local RANK_ELO = {
+	["Bronze III"] = 0,
+	["Bronze II"] = 200,
+	["Bronze I"] = 400,
+	["Silver III"] = 600,
+	["Silver II"] = 800,
+	["Silver I"] = 1000,
+	["Gold III"] = 1200,
+	["Gold II"] = 1400,
+	["Gold I"] = 1600,
+	["Platinum III"] = 1800,
+	["Platinum II"] = 2000,
+	["Platinum I"] = 2200,
+	["Diamond III"] = 2400,
+	["Diamond II"] = 2600,
+	["Diamond I"] = 2800,
+	["Onyx III"] = 3000,
+	["Onyx II"] = 3200,
+	["Onyx I"] = 3400,
+	["Nemesis"] = 3600,
+	["Archnemesis"] = 4000,
+}
+local RANK_LIST = {}
+for name, _ in pairs(RANK_ELO) do table.insert(RANK_LIST, name) end
+table.sort(RANK_LIST, function(a, b) return (RANK_ELO[a] or 0) < (RANK_ELO[b] or 0) end)
+
+local function eloFromPreset(name)
+	return RANK_ELO[name] or tonumber(CFG.DisplayELO) or 2400
+end
+
+local function ensureStat(folder, name, className)
+	className = className or "IntValue"
+	local v = folder:FindFirstChild(name)
+	if not v then
+		v = Instance.new(className)
+		v.Name = name
+		v.Parent = folder
+	end
+	return v
+end
+
+local function applyRivalsProfileSpoof()
+	local lv = tonumber(CFG.LevelValue) or 9999
+	local streak = tonumber(CFG.WinStreakValue) or 9999
+	local elo = tonumber(CFG.DisplayELO) or eloFromPreset(CFG.FakeRankPreset) or 2400
+	if CFG.FakeRankOn and CFG.FakeRankPreset then
+		elo = eloFromPreset(CFG.FakeRankPreset)
+		CFG.DisplayELO = elo
+	end
+
+	-- Level（英文 Attribute，不是「等級」）
+	if CFG.LevelSpoof then
+		pcall(function() lp:SetAttribute("Level", lv) end)
+		pcall(function() lp:SetAttribute("等級", lv) end) -- 舊版相容
+		pcall(function()
+			local ls = lp:FindFirstChild("CustomLeaderstats")
+			if not ls then
+				ls = Instance.new("Folder")
+				ls.Name = "CustomLeaderstats"
+				ls.Parent = lp
+			end
+			local levelVal = ls:FindFirstChild("Level") or ls:FindFirstChild("等級")
+			if not levelVal then
+				levelVal = Instance.new("IntValue")
+				levelVal.Name = "Level"
+				levelVal.Parent = ls
+			end
+			levelVal.Value = lv
+		end)
+	end
+
+	-- 連勝
+	if CFG.WinStreakSpoof then
+		pcall(function() lp:SetAttribute("StatisticDuelsWinStreak", streak) end)
+		pcall(function() lp:SetAttribute("連勝", streak) end)
+		pcall(function()
+			local ls = lp:FindFirstChild("CustomLeaderstats")
+			if not ls then
+				ls = Instance.new("Folder")
+				ls.Name = "CustomLeaderstats"
+				ls.Parent = lp
+			end
+			-- 常見名稱：Win Streak / 連勝 / WinStreak
+			for _, n in ipairs({ "Win Streak", "連勝", "WinStreak", "Winstreak" }) do
+				local w = ls:FindFirstChild(n)
+				if not w then
+					w = Instance.new("IntValue")
+					w.Name = n
+					w.Parent = ls
+				end
+				pcall(function() w.Value = streak end)
+			end
+		end)
+	end
+
+	-- 假段位 = DisplayELO（遊戲用 ELO 算段位徽章，不是頭上 TextLabel）
+	if CFG.FakeRankOn then
+		pcall(function() lp:SetAttribute("DisplayELO", elo) end)
+		pcall(function() lp:SetAttribute("ELO", elo) end)
+		pcall(function() lp:SetAttribute("Elo", elo) end)
+		pcall(function() lp:SetAttribute("RankedELO", elo) end)
+		pcall(function()
+			local ls = lp:FindFirstChild("CustomLeaderstats")
+			if not ls then
+				ls = Instance.new("Folder")
+				ls.Name = "CustomLeaderstats"
+				ls.Parent = lp
+			end
+			for _, n in ipairs({ "ELO", "Elo", "DisplayELO", "RankedELO" }) do
+				local e = ls:FindFirstChild(n)
+				if not e then
+					e = Instance.new("IntValue")
+					e.Name = n
+					e.Parent = ls
+				end
+				pcall(function() e.Value = elo end)
+			end
+		end)
+	end
+end
+
+-- 清掉舊的頭上假段位標籤（若有）
+pcall(function()
+	local head = lp.Character and lp.Character:FindFirstChild("Head")
+	if head then
+		for _, n in ipairs({ "NoirFakeRank", "HemaFakeRank" }) do
+			local bb = head:FindFirstChild(n)
+			if bb then bb:Destroy() end
+		end
+	end
+end)
+
+task.spawn(function()
+	while true do
+		if getgenv().HEMA_KILL then break end
+		pcall(applyRivalsProfileSpoof)
+		task.wait(0.35)
+	end
+end)
+
+-- ===================== Lunara 設備偽造 Device Spoof =====================
+local DEVICE_CFGS = {
+	Mobile = { Display = "Mobile", Code = "Touch" },
+	Console = { Display = "Console", Code = "Gamepad" },
+	VR = { Display = "VR", Code = "VR" },
+	PC = { Display = "PC", Code = "MouseKeyboard" },
+}
+local lastDeviceApply = 0
+local function applyDeviceSpoof()
+	if not CFG.DeviceSpoof then return end
+	local now = tick()
+	if now - lastDeviceApply < 0.5 then return end
+	lastDeviceApply = now
+	local cfg = DEVICE_CFGS[CFG.DeviceType or "Console"]
+	if not cfg then return end
+	for _ = 1, 3 do
+		local ok = pcall(function()
+			local r = RS:FindFirstChild("Remotes")
+			r = r and r:FindFirstChild("Replication")
+			r = r and r:FindFirstChild("Fighter")
+			local sc = r and r:FindFirstChild("SetControls")
+			if sc then
+				sc:FireServer(cfg.Code)
+				return true
+			end
+			return false
+		end)
+		if ok then break end
+		task.wait(0.2)
+	end
+end
+task.spawn(function()
+	while task.wait(30) do
+		if getgenv().HEMA_KILL then break end
+		if CFG.DeviceSpoof then pcall(applyDeviceSpoof) end
+	end
+end)
+
+
+print("[HEMA] CreateWindow…")
 	setBoot(L("建立視窗…", "Create window…"))
 	task.wait(0.15)
 	RunService.Heartbeat:Wait()
 	getgenv().HEMA_Library = Library
+	
+	-- Noir Hub：黑白主題
+	pcall(function()
+		Library.BackgroundColor = Color3.fromRGB(10, 10, 10)
+		Library.MainColor = Color3.fromRGB(16, 16, 16)
+		Library.AccentColor = Color3.fromRGB(255, 255, 255)
+		Library.OutlineColor = Color3.fromRGB(55, 55, 55)
+		Library.FontColor = Color3.fromRGB(240, 240, 240)
+		Library.RiskColor = Color3.fromRGB(220, 220, 220)
+		if Library.UpdateColorsUsingRegistry then
+			Library:UpdateColorsUsingRegistry()
+		end
+	end)
+
 	Window = Library:CreateWindow({
-		Title = "河馬科技 · Rivals  " .. tostring(getgenv().HEMA_VERSION or ""),
+		Title = "Noir Hub  " .. tostring(getgenv().HEMA_VERSION or ""),
 		Center = true,
 		AutoShow = true,
 		TabPadding = 4,
@@ -3424,46 +3835,57 @@ local function buildUI()
 	yieldBig()
 	print("[HEMA] tabs OK")
 
-	local C = TCombat:AddLeftGroupbox("Aim / Silent")
-	C:AddToggle("AimOn", { Text = "自瞄(右鍵)", Default = false, Callback = function(v) CFG.AimOn = v end })
-	C:AddToggle("Silent", { Text = "Silent(左鍵)", Default = false, Callback = function(v) CFG.Silent = v end })
-	C:AddToggle("SilentAuto", { Text = "Silent 自動", Default = false, Callback = function(v) CFG.SilentAuto = v end })
+	-- ========== Lunara 戰鬥頁（靜默 / 自瞄 / 槍械）==========
+	local C = TCombat:AddLeftGroupbox("靜默瞄準 Silent")
+	C:AddToggle("Silent", { Text = "啟用 Silent", Default = false, Callback = function(v) CFG.Silent = v end })
+	C:AddToggle("SilentAuto", { Text = "自動射擊 Auto", Default = false, Callback = function(v) CFG.SilentAuto = v end })
 	C:AddToggle("Triggerbot", { Text = "Triggerbot", Default = false, Callback = function(v) CFG.Triggerbot = v end })
-	C:AddToggle("TeamCheck", { Text = "隊友檢查", Default = true, Callback = function(v) CFG.TeamCheck = v end })
-	C:AddToggle("WallCheck", { Text = "牆壁檢查", Default = false, Callback = function(v) CFG.WallCheck = v end })
-	C:AddToggle("AntiKatana", { Text = "反卡塔納", Default = true, Callback = function(v) CFG.AntiKatana = v end })
-	C:AddToggle("AntiKatanaStrict", {
-		Text = "反卡塔納：持刀即跳過",
-		Default = true,
-		Callback = function(v) CFG.AntiKatanaStrict = v end,
+	C:AddToggle("AntiKatana", { Text = "反武士刀 Anti-Katana", Default = true, Callback = function(v) CFG.AntiKatana = v end })
+	C:AddToggle("AntiKatanaStrict", { Text = "持刀即跳過 Strict", Default = true, Callback = function(v) CFG.AntiKatanaStrict = v end })
+	C:AddToggle("TeamCheck", { Text = "隊友檢查 TeamID", Default = true, Callback = function(v) CFG.TeamCheck = v end })
+	C:AddToggle("WallCheck", { Text = "牆壁檢查 Wall", Default = false, Callback = function(v) CFG.WallCheck = v end })
+	C:AddSlider("HitChance", { Text = "命中機率 HitChance", Default = 100, Min = 0, Max = 100, Rounding = 0, Callback = function(v) CFG.HitChance = v end })
+	C:AddDropdown("Part", {
+		Values = { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "Closest" },
+		Default = 1, Multi = false, Text = "命中部位 HitPart",
+		Callback = function(v) CFG.Part = v end,
 	})
-	C:AddToggle("ShowFOV", { Text = "顯示 FOV", Default = true, Callback = function(v) CFG.ShowFOV = v end })
-	yield()
-	C:AddSlider("FOV", { Text = "FOV", Default = 200, Min = 60, Max = 400, Rounding = 0, Callback = function(v) CFG.FOV = v end })
-	C:AddSlider("Smooth", { Text = "自瞄平滑", Default = 0.25, Min = 0.05, Max = 0.6, Rounding = 2, Callback = function(v) CFG.Smooth = v end })
-	C:AddSlider("MaxDist", { Text = "鎖定距離", Default = 300, Min = 50, Max = 600, Rounding = 0, Callback = function(v) CFG.MaxDist = v end })
-	C:AddSlider("PixelY", { Text = "上下微調", Default = 0, Min = -40, Max = 40, Rounding = 0, Callback = function(v) CFG.PixelY = v end })
-	C:AddSlider("FireRate", { Text = "攻速間隔", Default = 0.06, Min = 0.02, Max = 0.2, Rounding = 2, Callback = function(v) CFG.FireRate = v end })
-	C:AddToggle("AutoSwap", { Text = "主武→副武", Default = false, Callback = function(v) CFG.AutoSwap = v end })
-	yield()
+	C:AddSlider("FOV", { Text = "Silent FOV", Default = 200, Min = 40, Max = 500, Rounding = 0, Callback = function(v) CFG.FOV = v end })
+	C:AddToggle("ShowFOV", { Text = "顯示 FOV", Default = false, Callback = function(v) CFG.ShowFOV = v end })
+	C:AddToggle("ShowSilentFOV", { Text = "顯示 Silent FOV", Default = false, Callback = function(v) CFG.ShowSilentFOV = v end })
+	C:AddSlider("FireRate", { Text = "攻速間隔 FireRate", Default = 0.05, Min = 0.01, Max = 0.2, Rounding = 3, Callback = function(v) CFG.FireRate = v end })
+	C:AddSlider("MaxDist", { Text = "最大距離", Default = 300, Min = 50, Max = 800, Rounding = 0, Callback = function(v) CFG.MaxDist = v end })
 	C:AddDropdown("TargetMode", {
 		Values = { "FOV", "Closest", "LowHP" },
-		Default = 1,
-		Multi = false,
-		Text = "目標優先",
+		Default = 1, Multi = false, Text = "目標優先",
 		Callback = function(v) CFG.TargetMode = v end,
 	})
-	C:AddToggle("SoftMode", { Text = "軟模式(降发包)", Default = true, Callback = function(v) CFG.SoftMode = v end })
-	C:AddSlider("SoftFireRate", { Text = "軟模式間隔", Default = 0.12, Min = 0.08, Max = 0.3, Rounding = 2, Callback = function(v) CFG.SoftFireRate = v end })
-	C:AddSlider("SoftHitChance", { Text = "軟模式命中%", Default = 70, Min = 30, Max = 100, Rounding = 0, Callback = function(v) CFG.SoftHitChance = v end })
-	C:AddToggle("Hitmarker", { Text = "Hitmarker", Default = true, Callback = function(v) CFG.Hitmarker = v end })
-	C:AddToggle("ShowStats", { Text = "傷害/擊殺計數", Default = true, Callback = function(v) CFG.ShowStats = v refreshStatsLabel() end })
-	C:AddButton("重置計數", function()
+	yield()
+
+	local A = TCombat:AddRightGroupbox("自瞄 Aimbot")
+	A:AddToggle("AimOn", { Text = "啟用自瞄", Default = false, Callback = function(v) CFG.AimOn = v end })
+	A:AddSlider("Smooth", { Text = "平滑 Smooth", Default = 0.25, Min = 0.05, Max = 0.8, Rounding = 2, Callback = function(v) CFG.Smooth = v end })
+	A:AddSlider("PixelY", { Text = "上下微調", Default = 0, Min = -40, Max = 40, Rounding = 0, Callback = function(v) CFG.PixelY = v end })
+	A:AddSlider("PixelX", { Text = "左右微調", Default = 0, Min = -40, Max = 40, Rounding = 0, Callback = function(v) CFG.PixelX = v end })
+	A:AddLabel("按住右鍵自瞄（RMB）")
+
+	local G = TCombat:AddLeftGroupbox("槍械 Gun")
+	G:AddToggle("RapidFire", { Text = "快速射擊 RapidFire", Default = false, Callback = function(v) CFG.RapidFire = v end })
+	G:AddToggle("NoSpread", { Text = "無散射 NoSpread", Default = false, Callback = function(v) CFG.NoSpread = v end })
+	G:AddToggle("NoRecoil", { Text = "無後座 NoRecoil", Default = false, Callback = function(v) CFG.NoRecoil = v end })
+	G:AddToggle("MaxAccuracy", { Text = "最高精準 MaxAccuracy", Default = false, Callback = function(v) CFG.MaxAccuracy = v end })
+	G:AddToggle("AutoSwap", { Text = "主武打完換副武", Default = false, Callback = function(v) CFG.AutoSwap = v end })
+	G:AddToggle("SoftMode", { Text = "軟模式 Soft", Default = false, Callback = function(v) CFG.SoftMode = v end })
+	G:AddSlider("SoftFireRate", { Text = "軟模式間隔", Default = 0.05, Min = 0.02, Max = 0.3, Rounding = 2, Callback = function(v) CFG.SoftFireRate = v end })
+	G:AddSlider("SoftHitChance", { Text = "軟模式命中%", Default = 100, Min = 10, Max = 100, Rounding = 0, Callback = function(v) CFG.SoftHitChance = v end })
+	G:AddToggle("Hitmarker", { Text = "Hitmarker", Default = false, Callback = function(v) CFG.Hitmarker = v end })
+	G:AddToggle("ShowStats", { Text = "傷害/擊殺計數", Default = false, Callback = function(v) CFG.ShowStats = v pcall(refreshStatsLabel) end })
+	G:AddButton("重置計數", function()
 		STATS.Damage, STATS.Kills, STATS.Hits = 0, 0, 0
-		refreshStatsLabel()
+		pcall(refreshStatsLabel)
 		Library:Notify("stats reset", 2)
 	end)
-	C:AddLabel("快捷鍵: V=自瞄  B=Silent")
+	G:AddLabel("Lunara 戰鬥核心 · 快捷鍵可在設定綁定")
 	yieldBig()
 	print("[HEMA] combat tab OK")
 
@@ -3491,12 +3913,37 @@ local function buildUI()
 	M:AddToggle("AutoQueue", { Text = "自動佇列", Default = false, Callback = function(v) CFG.AutoQueue = v end })
 	M:AddToggle("RankedQueue", { Text = "排名佇列", Default = false, Callback = function(v) CFG.RankedQueue = v end })
 	M:AddDropdown("QueueMode", { Values = { "1v1", "2v2", "3v3", "4v4" }, Default = 1, Multi = false, Text = "佇列模式", Callback = function(v) CFG.QueueMode = v end })
+	local DS = TMove:AddRightGroupbox("設備偽造 Device")
+	DS:AddToggle("DeviceSpoof", {
+		Text = "啟用設備偽造",
+		Default = false,
+		Callback = function(v)
+			CFG.DeviceSpoof = v
+			if v then pcall(applyDeviceSpoof) end
+		end,
+	})
+	DS:AddDropdown("DeviceType", {
+		Values = { "Mobile", "Console", "VR", "PC" },
+		Default = 2,
+		Multi = false,
+		Text = "裝置 Device",
+		Callback = function(v)
+			CFG.DeviceType = v
+			if CFG.DeviceSpoof then pcall(applyDeviceSpoof) end
+		end,
+	})
+	DS:AddButton("立刻套用", function()
+		lastDeviceApply = 0
+		pcall(applyDeviceSpoof)
+		Library:Notify("Device: " .. tostring(CFG.DeviceType), 2)
+	end)
+	DS:AddLabel("Lunara SetControls 同款")
 	yieldBig()
 	print("[HEMA] move tab OK")
 
 	local D = TDanger:AddLeftGroupbox("Ragebot")
 	D:AddToggle("RageOn", {
-		Text = L("啟用 Ragebot", "Enable Ragebot"),
+		Text = L("Lunara Ragebot", "Lunara Ragebot"),
 		Default = false,
 		Callback = function(v)
 			CFG.RageOn = v
@@ -3706,6 +4153,113 @@ local function buildUI()
 	yieldBig()
 	print("[HEMA] ragebot tab OK")
 
+
+	local FR = TVisual:AddRightGroupbox("Lunara Profile")
+	FR:AddToggle("LevelSpoof", {
+		Text = "等級 Level",
+		Default = false,
+		Callback = function(v) CFG.LevelSpoof = v pcall(applyRivalsProfileSpoof) end,
+	})
+	FR:AddInput("LevelValue", {
+		Text = "等級數值",
+		Default = "9999",
+		Numeric = true,
+		Finished = false,
+		Placeholder = "9999",
+		Callback = function(val)
+			CFG.LevelValue = tonumber(val) or 9999
+		end,
+	})
+	FR:AddToggle("WinStreakSpoof", {
+		Text = "連勝 WinStreak",
+		Default = false,
+		Callback = function(v) CFG.WinStreakSpoof = v pcall(applyRivalsProfileSpoof) end,
+	})
+	FR:AddInput("WinStreakValue", {
+		Text = "連勝數值",
+		Default = "9999",
+		Numeric = true,
+		Finished = false,
+		Placeholder = "9999",
+		Callback = function(val)
+			CFG.WinStreakValue = tonumber(val) or 9999
+		end,
+	})
+	FR:AddToggle("NameSpoof", {
+		Text = "名稱偽造 Name",
+		Default = false,
+		Callback = function(v)
+			CFG.NameSpoof = v
+			if v then pcall(applyNameSpoof) end
+		end,
+	})
+	FR:AddInput("NameSpoofValue", {
+		Text = "自訂名稱",
+		Default = "hi",
+		Numeric = false,
+		Finished = false,
+		Placeholder = "Type name...",
+		Callback = function(val)
+			CFG.NameSpoofValue = clearbadges(val or "hi")
+			if CFG.NameSpoof then pcall(applyNameSpoof) end
+		end,
+	})
+	FR:AddToggle("NameSpoofVerified", {
+		Text = "已驗證徽章 Verified",
+		Default = false,
+		Callback = function(v)
+			CFG.NameSpoofVerified = v
+			if CFG.NameSpoof then pcall(applyNameSpoof) end
+		end,
+	})
+	FR:AddToggle("NameSpoofPremium", {
+		Text = "進階徽章 Premium",
+		Default = false,
+		Callback = function(v)
+			CFG.NameSpoofPremium = v
+			if CFG.NameSpoof then pcall(applyNameSpoof) end
+		end,
+	})
+	FR:AddToggle("FakeRankOn", {
+		Text = "假段位 DisplayELO",
+		Default = false,
+		Callback = function(v)
+			CFG.FakeRankOn = v
+			pcall(applyRivalsProfileSpoof)
+		end,
+	})
+	FR:AddDropdown("FakeRankPreset", {
+		Values = {
+			"Bronze III", "Bronze II", "Bronze I",
+			"Silver III", "Silver II", "Silver I",
+			"Gold III", "Gold II", "Gold I",
+			"Platinum III", "Platinum II", "Platinum I",
+			"Diamond III", "Diamond II", "Diamond I",
+			"Onyx III", "Onyx II", "Onyx I",
+			"Nemesis", "Archnemesis",
+		},
+		Default = 15, -- Diamond III
+		Multi = false,
+		Text = "段位預設 → ELO",
+		Callback = function(v)
+			CFG.FakeRankPreset = v
+			CFG.DisplayELO = eloFromPreset(v)
+			if CFG.FakeRankOn then pcall(applyRivalsProfileSpoof) end
+		end,
+	})
+	FR:AddInput("DisplayELO", {
+		Text = "自訂 ELO 數值",
+		Default = "2400",
+		Numeric = true,
+		Finished = false,
+		Placeholder = "2400",
+		Callback = function(val)
+			CFG.DisplayELO = tonumber(val) or 2400
+			if CFG.FakeRankOn then pcall(applyRivalsProfileSpoof) end
+		end,
+	})
+	FR:AddLabel("寫入 DisplayELO（非標籤）· 僅本地")
+
 	local V = TVisual:AddLeftGroupbox("World / Lighting")
 	V:AddToggle("Fullbright", { Text = "全亮 Fullbright", Default = false, Callback = function(v) CFG.Fullbright = v end })
 	V:AddToggle("NoFog", { Text = "去霧 No Fog", Default = false, Callback = function(v) CFG.NoFog = v end })
@@ -3803,7 +4357,7 @@ local function buildUI()
 	print("[HEMA] visual tab OK")
 
 	local S = TSettings:AddLeftGroupbox("Config")
-	S:AddLabel("腳本版本: " .. tostring(getgenv().HEMA_VERSION or "?"))
+	S:AddLabel("Noir Hub 版本: " .. tostring(getgenv().HEMA_VERSION or "?"))
 	S:AddToggle("AutoLoadConfig", {
 		Text = "啟動時自動載入設定檔",
 		Default = CFG.AutoLoadConfig ~= false,
@@ -4085,7 +4639,7 @@ local function buildUI()
 	hideBoot()
 	pcall(function()
 		if Library and Library.Notify then
-			Library:Notify("HEMA " .. tostring(getgenv().HEMA_VERSION or ""), 3)
+			Library:Notify("Noir Hub " .. tostring(getgenv().HEMA_VERSION or ""), 3)
 		end
 	end)
 
